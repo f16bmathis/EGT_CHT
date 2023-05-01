@@ -1,0 +1,230 @@
+/*
+ * UNO, Blue OR Red TFT!!!
+ * Only works on MEGA. Had to change where it starts #include Arduino.h.......
+ * Added extra 2 bar positions, CHT2, EGT2
+ * If using Aircraft Temp Sensor - White wire is +, BLK is -
+ * -13 from temp1 to get it to 32 degrees in ice water
+ * THIS CURENTLY WORKS ALL 4 AND WITH ROTAX SENSOR
+ */
+
+// Universum | Universum Projects > TFTBarChart
+
+// Andrei FLorian 9/JUN/2018 - 10/JUN/2018
+
+// NOTE - This sketch only supports 4 blocks in the chart   4 blocks = 4 temperatures displayed
+
+  #include <Adafruit_GFX.h>    // Core graphics library
+  #include <Adafruit_TFTLCD.h> // Hardware-specific library
+  #include "Universum_TFTColours.h" // Universum library for colors
+
+  // ********* ALL THIS MADE THE MEGA WORK!!!  ****************************
+  #include <Arduino.h> 
+  #define USE_ADAFRUIT_SHIELD_PINOUT 1
+  #include <MCUFRIEND_kbv.h>
+  MCUFRIEND_kbv tft;
+
+
+  #include <max6675.h>          // Added for the MAX6675 sensor
+
+// Temperature Sensors
+int thermo1D0 = 22; // so
+int thermo1CS = 24; 
+int thermo1CLK = 26; // sck
+MAX6675 thermocouple1(thermo1CLK, thermo1CS, thermo1D0);
+float temp1 = 0; 
+
+int thermo2D0 = 23; // so
+int thermo2CS = 25; 
+int thermo2CLK = 27; // sck
+MAX6675 thermocouple2(thermo2CLK, thermo2CS, thermo2D0);
+float temp2 = 0;
+
+int thermo3D0 = 28; // so
+int thermo3CS = 30; 
+int thermo3CLK = 32; // sck
+MAX6675 thermocouple3(thermo3CLK, thermo3CS, thermo3D0);
+float temp3 = 0;
+
+int thermo4D0 = 29; // so
+int thermo4CS = 31; 
+int thermo4CLK = 33; // sck
+MAX6675 thermocouple4(thermo4CLK, thermo4CS, thermo4D0);
+float temp4 = 0;
+
+
+  //Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+  #define LCD_RESET A4
+
+  // Global Variables
+  int valueBlock[4];
+  int posBlock[4];
+  int prevPosBlock[4];
+
+  // Editable Variables
+  bool proDebug = 0;                          // TODO - Debugging? 0 = No, 1 = Yes
+  bool displayValues = true;                  // EDIT - Display Value of Blocks?
+  
+  uint16_t graphColor = BLACK;                  // EDIT - Prefered Color of Graph
+  uint16_t blockColor0; //  EDIT - Prefered Color of Blocks
+  uint16_t blockColor1; //  EDIT - Prefered Color of Blocks to "if" color of bar graph way below code for all four bars, colors
+  uint16_t blockColor2; //  EDIT - Prefered Color of Blocks
+  uint16_t blockColor3; //  EDIT - Prefered Color of Blocks
+ 
+  String graphBlock[] = {"CHT1", "EGT1", "CHT2", "EGT2"};   // EDIT - Names of Blocks
+  
+  int graphRange = 1500;                      // EDIT - Max possible number of block, eg Potentiometer = from 0 to 1024, so 1024         **** MAY CAUSE ISSUES IF 1024 IS MAXIMUM VALUE????????
+  int numberOfBlocks = 4;                     // EDIT - Number of Blocks to display  *********************ORIG (2)  WILL DISPLAY MORE CHARTS, BUT LOCATION IS BAD
+
+// calculate values
+  const int numberOfMarks = (numberOfBlocks * 2); // calculates amount of lines that mark x axis  *****Orig is "4", This made the GREEN blocks evenly spaced!!!!!!!
+  const int originX = 0; // the origin of the graph on the x axis         //Original 45  ********* This is for the little black chart outline I've deleted
+  const int originY = 210; // the origin of the graph on the y axis        // Original 200  ********** Height of bars starts at, that I deleted
+  const int sizeX = 270; // the size of the chart on the x axis (lenght)   //****************Original 270, changes width of bar
+  const int sizeY = 190; // the size of the chart on the y axis (height)   //****************Original 150, changes height of bar
+  
+  int boxSize = 70;             // Original (sizeX / numberOfMarks); // calculates the width of bars and spacing calculations below
+  int mark[] = {0,        (boxSize ), (boxSize + 15 ),   (boxSize +0 ), (boxSize + 100 ), (boxSize + 0), (boxSize +185), (boxSize +0 )}; // calculates the position of the marks
+  //          {from left}, box size ,   2nd bar start                     3rd bar start                    4th bar start
+  // Original above... int mark[] = {boxSize, (boxSize * 2), (boxSize * 3), (boxSize * 4), (boxSize * 5), (boxSize * 6), (boxSize * 7), (boxSize * 8)}; // calculates the position of the marks
+
+  const int minorSizeY = (originY + 0); // calculates the y origin of the marks              ******** Orig "10", got rid of the marks between "CHT1 EGT1, CHT2, EGT2" at bottom of chart
+  const int minorSizeX = (originX - 0); // calculates the x origin of the numbers            ******** Orig "10", no effect after 0ing the above
+  
+  int numberValue = (graphRange / 2); // calculates the value per number
+  int val[] = {graphRange, (numberValue * 5), (numberValue * 4), (numberValue * 3), (numberValue * 2), numberValue}; // calculates the value of each number
+
+void drawGraph()
+{
+  tft.fillScreen(BLACK);                   //  Added this when deleting home screen to get a Black screen
+  delay(500);
+  // draw title has been removed
+  tft.setCursor(10, 10);
+  tft.setTextColor(BLACK);
+  tft.setTextSize(4);
+
+  // draw lable names  CHT EGT at lower of chart bars
+  for(int i = 0; i < numberOfMarks; i += 2)
+  {
+    tft.setCursor((mark[i] + 6), (originY + 10));
+    tft.setTextColor(WHITE);                      //Original was BLACK
+    tft.setTextSize(2);
+    tft.println(graphBlock[i / 2]);
+  }
+}
+
+void graph()      // max temp 1500 F     1200F MAX EGT, Normal 860-1000      MAX CHT 374-446 MAX 500 max Diff between cyl 1 & 2 = 36
+{
+  valueBlock[0] = (temp1); //analogRead(temp1);                       //************************ ADDED 2 & 3 
+//                                       ORIG        valueBlock[0] = analogRead(A14);            //  edited to and use numbers for testing
+  valueBlock[1] = (temp2); //analogRead(temp2);         //(temp2);
+//                                       ORIG        valueBlock[1] = analogRead(A15);          //  edited to and use numbers for testing
+  valueBlock[2] = (temp3); //analogRead(temp3);
+//                                       ORIG        valueBlock[2] = analogRead(A16);            //  edited to and use numbers for testing
+  valueBlock[3] = (temp4); //analogRead(temp4);
+//                                       ORIG        valueBlock[3] = analogRead(A17);          //  edited to use numbers for testing
+
+  temp1 = thermocouple1.readFarenheit();   //thermocouple1.readFarenheit();               // For the SENSOR
+  delay(100);                                          // For the sensor
+  temp2 =  thermocouple2.readFarenheit();   //thermocouple1.readFarenheit();               // For the SENSOR
+  delay(100);                                          // For the sensor
+  temp3 =  thermocouple3.readFarenheit();   //thermocouple1.readFarenheit();               // For the SENSOR
+  delay(100);                                          // For the sensor
+  temp4 = thermocouple4.readFarenheit();   //thermocouple1.readFarenheit();               // For the SENSOR
+  delay(100);                                          // For the sensor
+
+
+                      // Color for CHT1  MAX CHT 374-446 MAX 500 max Diff between cyl 1 & 2 = 36
+if(valueBlock[0] <= (373))           //   ||  (valueBlock[0] >= 447))        // if CHT1 is <= 373 OR (||) >= 447, RED!
+{
+  blockColor0 = YELLOW;
+}
+if(valueBlock[0] >= (374)  &&  (valueBlock[0] <= 446))
+{
+  blockColor0 = GREEN;
+}
+if(valueBlock[0] >= (448))
+{
+  blockColor0 = RED;
+}
+
+                       // Color for EGT1  1200F MAX EGT, Normal 860-1000
+if((valueBlock[1] <= 859) || (valueBlock[1] >= 1001))
+{
+  blockColor1 = RED;
+}
+else
+{
+  blockColor1 = GREEN;
+}
+                      // Color for CHT2  MAX CHT 374-446 MAX 500 max Diff between cyl 1 & 2 = 36
+if((valueBlock[2] <= 373) ||  (valueBlock[2] >= 447))        // if CHT1 is <= 373 OR (||) >= 447, RED!
+{
+  blockColor2 = RED;
+}
+else
+{
+  blockColor2 = GREEN;
+}
+                       // Color for EGT2  1200F MAX EGT, Normal 860-1000
+if((valueBlock[3] <= 859) || (valueBlock[3] >= 1001))
+{
+  blockColor3 = RED;
+}
+else
+{
+  blockColor3 = GREEN;
+}
+
+  // map the sensor values to the graph size
+  for(int i = 0; i < numberOfBlocks; i++)
+  {                           // Draws the size of the bars
+      posBlock[0] = map(valueBlock[0], 0, graphRange, originY, (originY - sizeY));   // Change the "posBlock[i]" & "valueBlock[i]" to a "0" if I ever figure this out!
+      posBlock[1] = map(valueBlock[1], 0, graphRange, originY, (originY - sizeY));
+      posBlock[2] = map(valueBlock[2], 0, graphRange, originY, (originY - sizeY));
+      posBlock[3] = map(valueBlock[3], 0, graphRange, originY, (originY - sizeY));
+   }
+
+  // draw the blocks - draw only if value differs
+  for(int i = 0; i < numberOfBlocks; i++)
+
+  {
+    if(posBlock[i] > (prevPosBlock[i] + 2) || posBlock[i] < (prevPosBlock[i] - 2))
+    {
+      prevPosBlock[i] = posBlock[i];
+      //tft.fillRect((mark[i * 2] + 1), (originY - sizeY), (boxSize - 1), sizeY, BLACK); // Bar backgtound color BLACK means no outline
+      //delay(10);
+      //tft.fillRect((mark[i * 2] + 1), posBlock[i], (boxSize - 1), (originY - posBlock[i]), blockColor1);  // ***  ORIGINAL BELOW
+      tft.fillRect((mark[0 * 2] + 1), posBlock[0], (boxSize - 1), (originY - posBlock[0]), blockColor0);   // CHT1's bar 
+      tft.fillRect((mark[1 * 2] + 1), posBlock[1], (boxSize - 1), (originY - posBlock[1]), blockColor1);   // EGT1's bar
+      tft.fillRect((mark[2 * 2] + 1), posBlock[2], (boxSize - 1), (originY - posBlock[2]), blockColor2);   // CHT2's bar
+      tft.fillRect((mark[3 * 2] + 1), posBlock[3], (boxSize - 1), (originY - posBlock[3]), blockColor3);   // EGT2's bar
+    }
+  }
+
+      for(int i = 0; i < numberOfMarks; i += 2)
+    {
+      tft.setCursor((mark[i] + 8), (originY - 20));                    // ****** Centered the temperature readouts, Original was a "5"
+      tft.setTextColor(BLUE, GREEN);    //Temp value, font color, background color
+      tft.setTextSize(2);
+      tft.println(valueBlock[i / 2]);
+    }
+  }
+
+void setup()
+{
+  tft.reset(); // reset the screen
+  delay(500);
+  uint16_t identifier = tft.readID();
+  identifier=0x9341;
+
+  tft.begin(identifier);
+  tft.setRotation(1);  // ` plugs to right, 2 plugs at top, 3 plugs to left, 4 plugs to bottom FOR UNO!
+
+  drawGraph(); // draws the graph
+}
+
+void loop()
+{
+  graph(); // graphs the values on the graph
+  delay(200);
+}
